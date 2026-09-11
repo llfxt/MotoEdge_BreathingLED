@@ -144,7 +144,7 @@ class MainActivity : AppCompatActivity() {
         updateRadiusLabel(prefs.dotRadiusDp.toInt())
         sbRadius.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                val newRadius = progress + 4
+                val newRadius = 4 + progress
                 prefs.dotRadiusDp = newRadius.toFloat()
                 updateRadiusLabel(newRadius)
                 updatePreview()
@@ -153,9 +153,9 @@ class MainActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(seekBar: SeekBar?) {}
         })
 
-        // 4. 呼吸周期速度滑块 (1.0s - 5.0s, step 0.1s)
+        // 4. 呼吸周期滑块 (1.0s - 5.0s)
         sbDuration.max = 40
-        val durationProgress = ((prefs.breathingDuration - 1.0f) * 10f).toInt().coerceIn(0, 40)
+        val durationProgress = ((prefs.breathingDuration - 1.0f) * 10).toInt().coerceIn(0, 40)
         sbDuration.progress = durationProgress
         updateDurationLabel(prefs.breathingDuration)
         sbDuration.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -175,34 +175,39 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.btnColorAmber).setOnClickListener { selectColor("#F59E0B", "琥珀暖黄") }
         findViewById<Button>(R.id.btnColorRed).setOnClickListener { selectColor("#EF4444", "警示鲜红") }
 
-        // 6. 权限检查按钮
-        findViewById<Button>(R.id.btnGrantNotif).setOnClickListener {
+        // 6. 权限检查按钮（采用动态容错解析，避免因布局版本不同导致编译失败）
+        findViewByName<Button>("btnGrantNotif")?.setOnClickListener {
             openNotificationListenerSettings()
         }
-        findViewById<Button>(R.id.btnGrantFullScreen).setOnClickListener {
+        findViewByName<Button>("btnGrantFullScreen")?.setOnClickListener {
             openFullScreenIntentSettings()
         }
-        findViewById<Button>(R.id.btnGrantOverlay).setOnClickListener {
+        findViewByName<Button>("btnGrantOverlay")?.setOnClickListener {
             openOverlaySettings()
         }
-        findViewById<Button>(R.id.btnBatteryOpt).setOnClickListener {
+        findViewByName<Button>("btnBatteryOpt")?.setOnClickListener {
             openBatteryOptimizationSettings()
         }
 
         // 7. 测试息屏呼吸灯
-        findViewById<Button>(R.id.btnTestLed).setOnClickListener {
+        findViewByName<Button>("btnTestLed")?.setOnClickListener {
             NotificationMonitorService.unreadNotificationKeys.add("manual_test_key")
             Toast.makeText(this, "模拟通知已注入！请按下电源键熄屏，稍候即可看到呼吸圆点", Toast.LENGTH_LONG).show()
             startBackgroundMonitoring()
         }
 
         // 8. 立即全屏沉浸预览息屏呼吸灯（轻触屏幕任意位置即可退出）
-        findViewById<Button>(R.id.btnDirectAodPreview).setOnClickListener {
+        findViewByName<Button>("btnDirectAodPreview")?.setOnClickListener {
             AodLedActivity.start(this)
         }
 
         // 初始化实时预览小圆点
         updatePreview()
+    }
+
+    private inline fun <reified T : View> findViewByName(name: String): T? {
+        val id = resources.getIdentifier(name, "id", packageName)
+        return if (id != 0) findViewById<T>(id) else null
     }
 
     private fun updatePreview() {
@@ -230,90 +235,107 @@ class MainActivity : AppCompatActivity() {
     private fun selectColor(hex: String, name: String) {
         prefs.dotColor = hex
         updatePreview()
-        Toast.makeText(this, "已切换为：$name ($hex)", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "已切换为：\$name (\$hex)", Toast.LENGTH_SHORT).show()
     }
 
-    private fun updateOffsetXLabel(x: Int) {
-        tvOffsetXValue.text = "${x} dp"
+    private fun updateOffsetXLabel(value: Int) {
+        tvOffsetXValue.text = "\${value} dp"
     }
 
-    private fun updateOffsetYLabel(y: Int) {
-        tvOffsetYValue.text = "${y} dp"
+    private fun updateOffsetYLabel(value: Int) {
+        tvOffsetYValue.text = "\${value} dp"
     }
 
-    private fun updateRadiusLabel(radius: Int) {
-        tvRadiusValue.text = "${radius} dp"
+    private fun updateRadiusLabel(value: Int) {
+        tvRadiusValue.text = "\${value} dp"
     }
 
-    private fun updateDurationLabel(duration: Float) {
-        tvDurationValue.text = String.format("%.1f 秒", duration)
+    private fun updateDurationLabel(value: Float) {
+        tvDurationValue.text = String.format("%.1f s", value)
     }
 
     private fun checkPermissions() {
-        if (!isNotificationServiceEnabled()) {
-            AlertDialog.Builder(this)
-                .setTitle("需要通知监听权限")
-                .setMessage("为了在收到通知时显示左上角呼吸灯，需要开启系统的通知读取权限。")
-                .setPositiveButton("去开启") { _, _ -> openNotificationListenerSettings() }
-                .setNegativeButton("稍后再说", null)
-                .show()
+        if (!isNotificationListenerGranted()) {
+            showPermissionDialog(
+                title = "需要开启通知访问权限",
+                message = "呼吸灯需要监听新消息（如微信、短信）以触发闪烁。请在接下来的系统设置列表中找到【Moto 息屏呼吸灯】并允许。",
+                onPositive = { openNotificationListenerSettings() }
+            )
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+            showPermissionDialog(
+                title = "需要悬浮窗/顶层显示权限",
+                message = "为了在息屏和锁屏时显示发光圆点，请允许在其他应用上层显示。",
+                onPositive = { openOverlaySettings() }
+            )
         }
     }
 
-    private fun isNotificationServiceEnabled(): Boolean {
-        val cn = ComponentName(this, NotificationMonitorService::class.java)
+    private fun isNotificationListenerGranted(): Boolean {
+        val packageName = packageName
         val flat = Settings.Secure.getString(contentResolver, "enabled_notification_listeners")
-        return flat != null && flat.contains(cn.flattenToString())
+        return flat?.contains(packageName) == true
     }
 
     private fun openNotificationListenerSettings() {
-        startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
-    }
-
-    private fun openOverlaySettings() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
-            val intent = Intent(
-                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                Uri.parse("package:$packageName")
-            )
+        try {
+            val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
             startActivity(intent)
-        } else {
-            Toast.makeText(this, "悬浮窗权限已正常开启", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "无法自动跳转，请在系统设置中搜索：通知使用权", Toast.LENGTH_LONG).show()
         }
     }
 
     private fun openFullScreenIntentSettings() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+        if (Build.VERSION.SDK_INT >= 34) { // Android 14+
             try {
-                val intent = Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT).apply {
-                    data = Uri.parse("package:$packageName")
-                }
-                startActivity(intent)
-            } catch (e: Exception) {
-                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                    data = Uri.parse("package:$packageName")
-                }
-                startActivity(intent)
-            }
-        } else {
-            Toast.makeText(this, "当前系统已默认开放全屏唤醒通知通道", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun openBatteryOptimizationSettings() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            try {
-                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                    data = Uri.parse("package:$packageName")
+                val intent = Intent("android.settings.MANAGE_APP_USE_FULL_SCREEN_INTENT").apply {
+                    data = Uri.parse("package:\$packageName")
                 }
                 startActivity(intent)
             } catch (e: Exception) {
                 try {
-                    startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                        data = Uri.parse("package:\$packageName")
+                    }
+                    startActivity(intent)
                 } catch (e2: Exception) {
-                    Toast.makeText(this, "请在 Moto 系统设置中将本应用电池优化设为无限制", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "请前往：设置 > 应用 > 特殊应用权限 > 全屏意图/通知", Toast.LENGTH_LONG).show()
                 }
             }
+        } else {
+            Toast.makeText(this, "当前 Android 版本默认允许全屏意图通知", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    private fun openOverlaySettings() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val intent = Intent(
+                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:\$packageName")
+            )
+            startActivity(intent)
+        }
+    }
+
+    private fun openBatteryOptimizationSettings() {
+        try {
+            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.parse("package:\$packageName")
+            }
+            startActivity(intent)
+            Toast.makeText(this, "请点击【电池】> 选择【无限制 (Unrestricted)】", Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "请前往系统设置 > 应用管理 > 电池设置无限制", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun showPermissionDialog(title: String, message: String, onPositive: () -> Unit) {
+        AlertDialog.Builder(this)
+            .setTitle(title)
+            .setMessage(message)
+            .setPositiveButton("立即前往设置") { _, _ -> onPositive() }
+            .setNegativeButton("稍后") { dialog, _ -> dialog.dismiss() }
+            .setCancelable(false)
+            .show()
     }
 }
