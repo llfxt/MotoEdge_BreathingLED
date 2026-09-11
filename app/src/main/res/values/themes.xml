@@ -1,6 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.MotoBreathingLED" parent="Theme.Material3.DayNight.NoActionBar">
+    <!-- 主设置界面主题 -->
+    <style name="Theme.MotoBreathingLED" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">#00FF41</item>
+        <item name="colorPrimaryVariant">#10B981</item>
+        <item name="colorOnPrimary">#000000</item>
         <item name="android:statusBarColor">#0F172A</item>
         <item name="android:navigationBarColor">#0F172A</item>
+    </style>
+
+    <!-- 突破锁屏的全屏纯黑 AOD 主题（解决 AAPT 找不到资源的错误） -->
+    <style name="Theme.MotoBreathingLED.Aod" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="android:windowBackground">#000000</item>
+        <item name="android:colorBackground">#000000</item>
+        <item name="android:windowShowWhenLocked">true</item>
+        <item name="android:windowTurnScreenOn">true</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowContentOverlay">@null</item>
     </style>
 </resources>
