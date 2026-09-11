@@ -1,0 +1,54 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.9'
+
+      - name: Locate project and build APK
+        run: |
+          echo "=== 正在检测仓库目录结构 ==="
+          ls -la
+          
+          # 自动兼容：如果用户上传时将整个解压文件夹拖入，导致 settings.gradle.kts 处于子目录中
+          if [ ! -f "settings.gradle.kts" ] && [ ! -f "settings.gradle" ]; then
+            SUBDIR=$(find . -maxdepth 2 -name "settings.gradle.kts" -o -name "settings.gradle" | head -n 1 | xargs dirname)
+            if [ -n "$SUBDIR" ] && [ "$SUBDIR" != "." ]; then
+              echo "检测到工程位于子目录: $SUBDIR，正在切换..."
+              cd "$SUBDIR"
+            fi
+          fi
+
+          echo "=== 开始编译 APK ==="
+          if [ -f "./gradlew" ] && [ -f "./gradle/wrapper/gradle-wrapper.jar" ]; then
+            chmod +x ./gradlew
+            ./gradlew assembleDebug --stacktrace
+          else
+            echo "未检测到已包装好的 gradlew，使用系统 Gradle 8.9 直接编译..."
+            gradle assembleDebug --stacktrace
+          fi
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: moto-breathing-led-debug-apk
+          path: '**/build/outputs/apk/debug/*.apk'
+          retention-days: 14
