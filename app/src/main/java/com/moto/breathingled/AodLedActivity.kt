@@ -1,6 +1,10 @@
 package com.moto.breathingled
 
 import android.app.Activity
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -8,6 +12,7 @@ import android.content.IntentFilter
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
 import android.util.Log
 import android.view.MotionEvent
 import android.view.View
@@ -99,7 +104,7 @@ class AodLedActivity : Activity() {
                 )
                 wakeLock.acquire(2000)
             } catch (e: Throwable) {
-                Log.w(TAG, "WakeLock acquire note: ${e.message}")
+                Log.w(TAG, "WakeLock acquire note: \${e.message}")
             }
 
             // 3. 辅助直启（拥有悬浮窗权限时受系统白名单保护）
@@ -107,7 +112,7 @@ class AodLedActivity : Activity() {
                 context.startActivity(intent)
                 Log.d(TAG, "AodLedActivity direct startActivity invoked")
             } catch (e: Throwable) {
-                Log.w(TAG, "Direct startActivity note: ${e.message}")
+                Log.w(TAG, "Direct startActivity note: \${e.message}")
             }
         }
 
